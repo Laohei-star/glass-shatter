@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>碎玻璃文字【老黑】</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{overflow:hidden;background:#000;cursor:none;font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif}
+canvas{display:block}
+
+/* ===== 控制面板 ===== */
+.control-panel{position:fixed;top:0;right:0;width:300px;max-height:100vh;background:rgba(18,18,26,0.92);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-left:1px solid rgba(255,255,255,0.08);border-radius:0 0 0 12px;padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;z-index:1000;transform:translateX(0);transition:transform 0.35s cubic-bezier(0.4,0,0.2,1);cursor:default}
+.control-panel.collapsed{transform:translateX(100%)}
+.panel-title{font-size:16px;font-weight:700;color:#fff;padding-bottom:10px;border-bottom:1px solid #2a2a3a}
+.param-label{display:flex;justify-content:space-between;font-size:12px;color:#aaa;margin-bottom:4px}
+.param-value{font-family:"Cascadia Code","Fira Code",monospace;color:#6366f1;font-weight:600;font-size:13px}
+input[type="range"]{-webkit-appearance:none;width:100%;height:5px;border-radius:3px;background:#1e1e2e;outline:none;cursor:pointer}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#6366f1;cursor:pointer;box-shadow:0 0 6px rgba(99,102,241,0.5)}
+input[type="range"]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#6366f1;cursor:pointer;border:none}
+.save-btn{padding:10px 0;border:none;border-radius:7px;background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.toggle-btn{position:fixed;top:16px;right:16px;z-index:1001;width:40px;height:40px;border:1px solid rgba(255,255,255,0.2);border-radius:8px;background:rgba(18,18,26,0.85);color:#ccc;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center}
+.color-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;align-items:center}
+.color-pick{display:flex;align-items:center;gap:6px}
+.color-pick label{font-size:10px;color:#888}
+.color-pick input[type="color"]{width:28px;height:28px;border:1px solid #2a2a3a;border-radius:5px;cursor:pointer;background:#1a1a24}
+.text-input{width:100%;padding:8px 10px;background:#1a1a24;border:1px solid #2a2a3a;border-radius:5px;color:#e8ecff;font-size:13px;outline:none}
+.text-input:focus{border-color:#6366f1}
+.font-file-btn{display:block;padding:6px 10px;border:1px dashed #3a3a4a;border-radius:5px;background:#1a1a24;color:#888;font-size:11px;cursor:pointer;text-align:center;transition:all 0.2s;margin-top:6px}
+.font-file-btn:hover{border-color:#6366f1;color:#aaa}
+.font-file-name{font-size:10px;color:#6366f1;margin-top:4px;min-height:14px}
+.preset-row{display:flex;gap:6px}
+.preset-btn{flex:1;padding:6px 0;border:1px solid #2a2a3a;border-radius:5px;background:#1a1a24;color:#888;font-size:11px;cursor:pointer;transition:all 0.2s}
+.preset-btn.active{background:#6366f1;color:#fff;border-color:#6366f1}
+.section-label{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+/* ===== 底部挂件 ===== */
+.bottom-links{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:999;background:rgba(18,18,26,0.75);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:6px 12px;border-radius:28px;border:1px solid rgba(255,255,255,0.08);transition:opacity 0.35s,transform 0.35s}
+.bottom-links.hidden{opacity:0;transform:translateX(-50%) translateY(20px);pointer-events:none}
+.bottom-links.visible{opacity:1;transform:translateX(-50%) translateY(0)}
+.link-icon{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#aaa;cursor:pointer;transition:all 0.2s;font-size:14px;text-decoration:none}
+.link-icon:hover{background:rgba(99,102,241,0.25);border-color:rgba(99,102,241,0.4)}
+.link-icon svg{width:18px;height:18px;fill:none;stroke:#aaa;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.link-icon:hover svg{stroke:#fff}
+.link-icon.h-letter{font-weight:700;font-family:"Cascadia Code",monospace;font-size:13px}
+.bottom-expand{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:998;width:32px;height:32px;border:1px solid rgba(255,255,255,0.12);border-radius:50%;background:rgba(18,18,26,0.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#aaa;cursor:pointer;display:none;align-items:center;justify-content:center;transition:opacity 0.35s}
+.bottom-expand.visible{display:flex}
+.bottom-expand svg{width:16px;height:16px;fill:none;stroke:#aaa;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.info-modal{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.info-modal.show{display:flex}
+.info-box{background:rgba(18,18,26,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:32px 40px;text-align:center;animation:infoIn 0.25s ease}
+.info-label{font-size:12px;color:#888;margin-bottom:8px}
+.info-name{font-size:22px;font-weight:700;color:#fff}
+@keyframes infoIn{from{transform:scale(0.9);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* ===== 呼吸光标 ===== */
+.cursor-dot{position:fixed;top:0;left:0;z-index:9999;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 8px rgba(255,255,255,0.85),0 0 18px rgba(255,255,255,0.4);transform:translate(-50%,-50%);pointer-events:none;animation:cursorBreathe 1.8s ease-in-out infinite}
+.cursor-dot.hide{opacity:0}
+@keyframes cursorBreathe{0%,100%{transform:translate(-50%,-50%) scale(0.7);opacity:0.55}50%{transform:translate(-50%,-50%) scale(1.25);opacity:1}}
+</style>
+</head>
+<body>
+<div class="cursor-dot" id="cursorDot"></div>
+
+<div class="control-panel" id="controlPanel">
+  <div class="panel-title">碎玻璃文字【老黑】</div>
+
+  <div>
+    <div class="param-label"><span>文字（换行用回车）</span></div>
+    <textarea class="text-input" id="textInput" rows="3" style="resize:none;font-family:inherit">hi laohei</textarea>
+  </div>
+
+  <div>
+    <div class="param-label"><span>字体名</span></div>
+    <input class="text-input" id="fontInput" value="sans-serif" placeholder="如 楷体 / 仿宋">
+    <label class="font-file-btn" for="fontFile">＋ 加载本地字体 .ttf/.otf</label>
+    <input type="file" id="fontFile" accept=".ttf,.otf,.woff" style="display:none">
+    <div class="font-file-name" id="fontFileName"></div>
+  </div>
+
+  <div>
+    <div class="param-label"><span>字号</span><span class="param-value" id="fontSizeVal">200</span></div>
+    <input type="range" id="fontSize" min="20" max="400" value="200">
+  </div>
+
+  <div class="section-label">碎裂效果</div>
+
+  <div>
+    <div class="param-label"><span>碎片密度</span><span class="param-value" id="shardCountVal">20</span></div>
+    <input type="range" id="shardCount" min="5" max="50" value="20">
+  </div>
+
+  <div>
+    <div class="param-label"><span>玻璃透明度</span><span class="param-value" id="glassAlphaVal">0.5</span></div>
+    <input type="range" id="glassAlpha" min="0.02" max="1" step="0.01" value="0.5">
+  </div>
+
+  <div class="section-label">配色</div>
+
+  <div class="preset-row">
+    <button class="preset-btn active" data-preset="ice">冰晶</button>
+    <button class="preset-btn" data-preset="amber">琥珀</button>
+    <button class="preset-btn" data-preset="neon">霓虹</button>
+  </div>
+
+  <div class="color-row">
+    <div class="color-pick"><label>玻璃</label><input type="color" id="c1Pick" value="#ffffff"></div>
+    <div class="color-pick"><label>文字</label><input type="color" id="c2Pick" value="#a0d8ff"></div>
+    <div class="color-pick"><label>背景</label><input type="color" id="bgPick" value="#0000ff"></div>
+  </div>
+
+  <button class="save-btn" id="resetBtn">重置玻璃</button>
+  <button class="save-btn" id="saveBtn" style="background:linear-gradient(135deg,#1a1a24,#2a2a3a)">保存图片</button>
+</div>
+
+<button class="toggle-btn" id="toggleBtn">☰</button>
+
+<div class="bottom-links" id="bottomLinks">
+  <button class="link-icon" id="wechatBtn" title="公众号：黑白间设计"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></button>
+  <a class="link-icon" href="https://space.bilibili.com/76949949" target="_blank" title="B站：黑白间设计"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M9 2l3 4M15 2l-3 4"/><circle cx="9" cy="13" r="1.2"/><circle cx="15" cy="13" r="1.2"/></svg></a>
+  <a class="link-icon h-letter" href="https://pan.quark.cn/s/3fdb856606ad" target="_blank" title="HEIP插件下载">H</a>
+  <button class="link-icon" id="hideLinksBtn" title="收起"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+</div>
+<button class="bottom-expand" id="showLinksBtn"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+
+<div class="info-modal" id="infoModal">
+  <div class="info-box">
+    <div class="info-label">微信公众号</div>
+    <div class="info-name">黑白间设计</div>
+  </div>
+</div>
+
+<script src="p5.min.js"></script>
+<script>
+// ===== 配置 =====
+const presets = {
+  ice:   { c1: '#ffffff', c2: '#a0d8ff', bg: '#0000ff' },
+  amber: { c1: '#ffffff', c2: '#ffd0a0', bg: '#ff3c00' },
+  neon:  { c1: '#ff4fa0', c2: '#ff80c0', bg: '#080014' }
+};
+
+const cfg = {
+  text: 'hi laohei',
+  fontName: 'sans-serif',
+  fontSize: 200,
+  shardCount: 20,
+  glassAlpha: 0.5,
+  c1: '#ffffff',
+  c2: '#a0d8ff',
+  bg: '#0000ff'
+};
+
+let glassBuffer = null;
+let cnv;
+let rootShard = null;
+let impactRings = [];
+let flyingShards = [];
+
+// ===== 几何工具 =====
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+function polyBounds(poly) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of poly) {
+    if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+function polyArea(poly) {
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const j = (i + 1) % poly.length;
+    area += poly[i].x * poly[j].y - poly[j].x * poly[i].y;
+  }
+  return Math.abs(area) / 2;
+}
+
+// Sutherland-Hodgman 多边形裁剪
+function clipPolygon(subject, clip) {
+  let output = subject.slice();
+  for (let i = 0; i < clip.length; i++) {
+    const A = clip[i];
+    const B = clip[(i + 1) % clip.length];
+    const input = output;
+    output = [];
+    for (let j = 0; j < input.length; j++) {
+      const P = input[j];
+      const Q = input[(j + 1) % input.length];
+      const Pin = (B.x - A.x) * (P.y - A.y) - (B.y - A.y) * (P.x - A.x) >= 0;
+      const Qin = (B.x - A.x) * (Q.y - A.y) - (B.y - A.y) * (Q.x - A.x) >= 0;
+      if (Pin) {
+        output.push(P);
+        if (!Qin) output.push(lineIntersect(P, Q, A, B));
+      } else if (Qin) {
+        output.push(lineIntersect(P, Q, A, B));
+      }
+    }
+    if (output.length < 3) return [];
+  }
+  return output;
+}
+
+function lineIntersect(P, Q, A, B) {
+  const d1x = Q.x - P.x, d1y = Q.y - P.y;
+  const d2x = B.x - A.x, d2y = B.y - A.y;
+  const denom = d1x * d2y - d1y * d2x;
+  if (Math.abs(denom) < 1e-10) return P;
+  const t = ((A.x - P.x) * d2y - (A.y - P.y) * d2x) / denom;
+  return { x: P.x + t * d1x, y: P.y + t * d1y };
+}
+
+// ===== Voronoi 计算 =====
+function computeVoronoi(seeds, bounds) {
+  const cells = [];
+  for (let i = 0; i < seeds.length; i++) {
+    let poly = [
+      { x: bounds.x, y: bounds.y },
+      { x: bounds.x + bounds.w, y: bounds.y },
+      { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+      { x: bounds.x, y: bounds.y + bounds.h }
+    ];
+    for (let j = 0; j < seeds.length; j++) {
+      if (i === j) continue;
+      poly = clipHalfPlane(poly, seeds[i], seeds[j]);
+      if (poly.length === 0) break;
+    }
+    if (poly.length >= 3) cells.push(poly);
+  }
+  return cells;
+}
+
+function clipHalfPlane(poly, p1, p2) {
+  const mx = (p1.x + p2.x) / 2;
+  const my = (p1.y + p2.y) / 2;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const result = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const da = (a.x - mx) * dx + (a.y - my) * dy;
+    const db = (b.x - mx) * dx + (b.y - my) * dy;
+    if (da <= 0) {
+      result.push(a);
+      if (db > 0) { const t = da / (da - db); result.push({ x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) }); }
+    } else if (db <= 0) { const t = da / (da - db); result.push({ x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) }); }
+  }
+  return result;
+}
+
+// ===== Shard 类（递归碎片树） =====
+class Shard {
+  constructor(poly) {
+    this.poly = poly;
+    this.children = null;
+    // 随机位移（让碎片看起来是独立的）
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 2 + Math.random() * 4;
+    this.offsetX = Math.cos(angle) * dist;
+    this.offsetY = Math.sin(angle) * dist;
+  }
+
+  // 查找包含点击点的叶子碎片
+  findLeaf(x, y) {
+    if (!pointInPoly(x, y, this.poly)) return null;
+    if (this.children) {
+      for (const child of this.children) {
+        const leaf = child.findLeaf(x, y);
+        if (leaf) return leaf;
+      }
+    }
+    return this;
+  }
+
+  // 碎裂：生成子碎片
+  crack(cx, cy) {
+    const bounds = polyBounds(this.poly);
+    const area = polyArea(this.poly);
+    const minArea = 200;
+    if (area < minArea) return false;
+
+    // 生成 Voronoi 种子（碎片数量有随机性）
+    const seeds = [{ x: cx, y: cy }];
+    const maxR = Math.hypot(bounds.w, bounds.h) * 0.7;
+    const actualCount = Math.max(5, Math.round(cfg.shardCount * (0.6 + Math.random() * 0.8)));
+    for (let i = 0; i < actualCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.random() * Math.random() * maxR + 10;
+      seeds.push({
+        x: cx + Math.cos(angle) * dist,
+        y: cy + Math.sin(angle) * dist
+      });
+    }
+    // 边角种子
+    seeds.push(
+      { x: bounds.x, y: bounds.y },
+      { x: bounds.x + bounds.w, y: bounds.y },
+      { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+      { x: bounds.x, y: bounds.y + bounds.h }
+    );
+
+    // 计算 Voronoi，然后裁剪到当前碎片的多边形
+    const rawCells = computeVoronoi(seeds, bounds);
+    this.children = [];
+    for (const cell of rawCells) {
+      const clipped = clipPolygon(cell, this.poly);
+      if (clipped.length >= 3 && polyArea(clipped) > 50) {
+        this.children.push(new Shard(clipped));
+      }
+    }
+    return this.children.length > 0;
+  }
+
+  // 绘制叶子碎片
+  draw(c1rgb) {
+    if (this.children) {
+      for (const child of this.children) child.draw(c1rgb);
+      return;
+    }
+    // 画位移后的碎片
+    push();
+    translate(this.offsetX, this.offsetY);
+    drawingContext.save();
+    drawingContext.beginPath();
+    for (let i = 0; i < this.poly.length; i++) {
+      if (i === 0) drawingContext.moveTo(this.poly[i].x, this.poly[i].y);
+      else drawingContext.lineTo(this.poly[i].x, this.poly[i].y);
+    }
+    drawingContext.closePath();
+    drawingContext.clip();
+    image(glassBuffer, 0, 0);
+    drawingContext.restore();
+
+    // 碎片边缘
+    stroke(255, 255, 255, 60);
+    strokeWeight(0.7);
+    noFill();
+    beginShape();
+    for (const p of this.poly) vertex(p.x, p.y);
+    endShape(CLOSE);
+    // 裂纹光晕
+    stroke(c1rgb[0], c1rgb[1], c1rgb[2], 30);
+    strokeWeight(2);
+    beginShape();
+    for (const p of this.poly) vertex(p.x, p.y);
+    endShape(CLOSE);
+    pop();
+  }
+}
+
+// ===== ImpactRing =====
+class ImpactRing {
+  constructor(x, y) { this.x = x; this.y = y; this.r = 0; this.life = 1.0; }
+  update() { this.r += 8; this.life -= 0.04; }
+  draw() {
+    if (this.life <= 0) return;
+    const c1 = color(cfg.c1);
+    noFill();
+    stroke(red(c1), green(c1), blue(c1), this.life * 180);
+    strokeWeight(2.5 * this.life);
+    circle(this.x, this.y, this.r * 2);
+    if (this.life > 0.7) {
+      fill(255, 255, 255, (this.life - 0.7) * 800);
+      noStroke();
+      circle(this.x, this.y, 30 * (this.life - 0.7) * 3);
+    }
+  }
+}
+
+// ===== 飞溅碎片 =====
+class FlyingShard {
+  constructor(cx, cy, area) {
+    const n = 3 + Math.floor(Math.random() * 4);
+    // 飞溅碎片大小随被敲碎片面积缩放，小碎片飞溅出的碎片更小
+    const sizeScale = Math.min(1, 0.2 + Math.sqrt(area / 80000) * 0.8);
+    const size = (1.5 + Math.random() * 5) * sizeScale;
+    this.poly = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+      const r = size * (0.6 + Math.random() * 0.4);
+      this.poly.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+    }
+    this.x = cx + (Math.random() - 0.5) * 10;
+    this.y = cy + (Math.random() - 0.5) * 10;
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (2 + Math.random() * 6) * sizeScale;
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed - 3 * sizeScale;
+    this.angle = 0;
+    this.spin = (Math.random() - 0.5) * 0.15 * sizeScale;
+    this.alpha = 1;
+    this.gravity = 0.3 * sizeScale;
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    this.vy += this.gravity; this.vx *= 0.99;
+    this.angle += this.spin;
+    if (this.y > height + 30) this.alpha = 0;
+    this.alpha -= 0.006;
+  }
+  draw() {
+    if (this.alpha <= 0) return;
+    const c1 = color(cfg.c1);
+    push();
+    translate(this.x, this.y);
+    rotate(this.angle);
+    fill(red(c1), green(c1), blue(c1), this.alpha * 120);
+    stroke(255, 255, 255, this.alpha * 180);
+    strokeWeight(0.8);
+    beginShape();
+    for (const p of this.poly) vertex(p.x, p.y);
+    endShape(CLOSE);
+    pop();
+  }
+}
+
+// ===== 玻璃纹理（全屏） =====
+function rebuildGlassBuffer() {
+  if (!glassBuffer) return;
+  const ctx = glassBuffer.drawingContext;
+  ctx.clearRect(0, 0, width, height);
+  const c1 = color(cfg.c1);
+  const r1 = red(c1), g1 = green(c1), b1 = blue(c1);
+
+  // 玻璃底色
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0, `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 1.8})`);
+  grad.addColorStop(0.4, `rgba(${r1},${g1},${b1},${cfg.glassAlpha})`);
+  grad.addColorStop(1, `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 0.4})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  // 对角线反光
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const reflGrad = ctx.createLinearGradient(0, 0, width, height);
+  reflGrad.addColorStop(0, 'rgba(255,255,255,0)');
+  reflGrad.addColorStop(0.42, 'rgba(255,255,255,0.02)');
+  reflGrad.addColorStop(0.5, 'rgba(255,255,255,0.06)');
+  reflGrad.addColorStop(0.58, 'rgba(255,255,255,0.02)');
+  reflGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = reflGrad;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+
+  // 文字
+  const lines = cfg.text.split('\n');
+  const lh = cfg.fontSize * 1.4;
+  ctx.font = `300 ${cfg.fontSize}px ${cfg.fontName}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const startY = height / 2 - (lines.length - 1) * lh / 2;
+  ctx.fillStyle = `rgba(${r1},${g1},${b1},0.25)`;
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], width / 2 + 2, startY + i * lh + 2);
+  ctx.fillStyle = cfg.c2;
+  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], width / 2, startY + i * lh);
+
+  // 玻璃上层覆盖
+  ctx.fillStyle = `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 0.5})`;
+  ctx.fillRect(0, 0, width, height);
+
+  // 微噪点
+  for (let i = 0; i < 200; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.025})`;
+    ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1);
+  }
+}
+
+// ===== 玻璃破碎音效（Web Audio API 合成） =====
+let audioCtx = null;
+function playGlassBreak() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const now = audioCtx.currentTime;
+
+  // 主输出
+  const master = audioCtx.createGain();
+  master.gain.setValueAtTime(0.5, now);
+  master.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+  master.connect(audioCtx.destination);
+
+  // 1. 冲击"砰"声（低频，极短）
+  const thudOsc = audioCtx.createOscillator();
+  thudOsc.type = 'sine';
+  thudOsc.frequency.setValueAtTime(180, now);
+  thudOsc.frequency.exponentialRampToValueAtTime(60, now + 0.08);
+  const thudGain = audioCtx.createGain();
+  thudGain.gain.setValueAtTime(0.3, now);
+  thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  thudOsc.connect(thudGain);
+  thudGain.connect(master);
+  thudOsc.start(now);
+  thudOsc.stop(now + 0.12);
+
+  // 2. 高频碎裂噪声（极短、极亮）
+  const noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) {
+    nd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / nd.length, 3);
+  }
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const noiseBP = audioCtx.createBiquadFilter();
+  noiseBP.type = 'bandpass';
+  noiseBP.frequency.setValueAtTime(6000, now);
+  noiseBP.frequency.exponentialRampToValueAtTime(3000, now + 0.12);
+  noiseBP.Q.value = 1.5;
+  const noiseHP = audioCtx.createBiquadFilter();
+  noiseHP.type = 'highpass';
+  noiseHP.frequency.value = 2500;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(0.6, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+  noise.connect(noiseBP);
+  noiseBP.connect(noiseHP);
+  noiseHP.connect(noiseGain);
+  noiseGain.connect(master);
+  noise.start(now);
+
+  // 3. 水晶"叮"声（正弦波，高频，快速衰减，带音高下坠）
+  const tingCount = 8 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < tingCount; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    const freq = 5000 + Math.random() * 8000;
+    const delay = Math.random() * 0.08;
+    osc.frequency.setValueAtTime(freq, now + delay);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.7, now + delay + 0.04);
+    const tingGain = audioCtx.createGain();
+    tingGain.gain.setValueAtTime(0, now + delay);
+    tingGain.gain.linearRampToValueAtTime(0.12, now + delay + 0.002);
+    tingGain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.08);
+    osc.connect(tingGain);
+    tingGain.connect(master);
+    osc.start(now + delay);
+    osc.stop(now + delay + 0.1);
+  }
+
+  // 4. 微弱尾响（延迟的高频泛音）
+  const shimmerCount = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < shimmerCount; i++) {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    const freq = 8000 + Math.random() * 6000;
+    const delay = 0.05 + Math.random() * 0.1;
+    osc.frequency.setValueAtTime(freq, now + delay);
+    const sGain = audioCtx.createGain();
+    sGain.gain.setValueAtTime(0, now + delay);
+    sGain.gain.linearRampToValueAtTime(0.05, now + delay + 0.003);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.15);
+    osc.connect(sGain);
+    sGain.connect(master);
+    osc.start(now + delay);
+    osc.stop(now + delay + 0.2);
+  }
+}
+
+// ===== 点击碎裂 =====
+function onCanvasPointerDown(e) {
+  const px = mouseX, py = mouseY;
+  impactRings.push(new ImpactRing(px, py));
+  // 碎裂对应碎片
+  if (rootShard) {
+    const leaf = rootShard.findLeaf(px, py);
+    if (leaf) {
+      // 飞溅碎片数量随被敲碎片面积自动缩放，小碎片飞溅少
+      const area = polyArea(leaf.poly);
+      const burstCount = Math.max(2, Math.min(16, Math.round(Math.sqrt(area / 2500) * (0.5 + Math.random() * 0.8))));
+      for (let i = 0; i < burstCount; i++) flyingShards.push(new FlyingShard(px, py, area));
+      leaf.crack(px, py);
+    }
+  }
+}
+
+// ===== p5 主循环 =====
+function setup() {
+  cnv = createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  colorMode(RGB, 255, 255, 255, 255);
+  glassBuffer = createGraphics(width, height);
+  glassBuffer.pixelDensity(1);
+  rebuildGlassBuffer();
+  rootShard = new Shard([
+    { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }
+  ]);
+  rootShard.offsetX = 0; rootShard.offsetY = 0; // 根碎片无位移
+  cnv.elt.addEventListener('pointerdown', onCanvasPointerDown);
+  bindUI();
+}
+
+function draw() {
+  background(cfg.bg);
+
+  // 绘制碎片树
+  if (rootShard) {
+    if (rootShard.children) {
+      // 已碎裂：只画叶子碎片
+      const c1 = color(cfg.c1);
+      rootShard.draw([red(c1), green(c1), blue(c1)]);
+    } else {
+      // 未碎裂：画完整玻璃
+      image(glassBuffer, 0, 0);
+    }
+  }
+
+  // 冲击波
+  for (let i = impactRings.length - 1; i >= 0; i--) {
+    impactRings[i].update();
+    impactRings[i].draw();
+    if (impactRings[i].life <= 0) impactRings.splice(i, 1);
+  }
+
+  // 飞溅碎片
+  for (let i = flyingShards.length - 1; i >= 0; i--) {
+    flyingShards[i].update();
+    flyingShards[i].draw();
+    if (flyingShards[i].alpha <= 0) flyingShards.splice(i, 1);
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  glassBuffer = createGraphics(width, height);
+  glassBuffer.pixelDensity(1);
+  rebuildGlassBuffer();
+  rootShard = new Shard([
+    { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }
+  ]);
+  rootShard.offsetX = 0; rootShard.offsetY = 0;
+  impactRings = [];
+  flyingShards = [];
+}
+
+// ===== UI 绑定 =====
+function bindUI() {
+  const panel = document.getElementById('controlPanel');
+  document.getElementById('toggleBtn').onclick = () => panel.classList.toggle('collapsed');
+
+  const sliders = [
+    ['fontSize', 'fontSizeVal', v => v + 'px'],
+    ['shardCount', 'shardCountVal', v => v],
+    ['glassAlpha', 'glassAlphaVal', v => v]
+  ];
+  for (const [id, valId, fmt] of sliders) {
+    const el = document.getElementById(id);
+    const valEl = document.getElementById(valId);
+    el.oninput = () => {
+      const v = parseFloat(el.value);
+      cfg[id] = v;
+      valEl.textContent = fmt(v);
+      if (id === 'fontSize' || id === 'glassAlpha') rebuildGlassBuffer();
+    };
+  }
+
+  document.getElementById('textInput').addEventListener('input', (e) => {
+    cfg.text = e.target.value || ' ';
+    rebuildGlassBuffer();
+  });
+
+  document.getElementById('fontInput').addEventListener('input', (e) => {
+    cfg.fontName = e.target.value;
+    rebuildGlassBuffer();
+  });
+
+  document.getElementById('fontFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('fontFileName').textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const family = 'custom_' + Date.now();
+      const fontFace = new FontFace(family, `url(${reader.result})`);
+      fontFace.load().then((loaded) => {
+        document.fonts.add(loaded);
+        cfg.fontName = family;
+        document.getElementById('fontInput').value = file.name;
+        rebuildGlassBuffer();
+      }).catch((err) => {
+        document.getElementById('fontFileName').textContent = '加载失败：' + err;
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const p = presets[btn.dataset.preset];
+      cfg.c1 = p.c1; cfg.c2 = p.c2; cfg.bg = p.bg;
+      document.getElementById('c1Pick').value = p.c1;
+      document.getElementById('c2Pick').value = p.c2;
+      document.getElementById('bgPick').value = p.bg;
+      rebuildGlassBuffer();
+    };
+  });
+
+  document.getElementById('c1Pick').oninput = (e) => {
+    cfg.c1 = e.target.value;
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    rebuildGlassBuffer();
+  };
+  document.getElementById('c2Pick').oninput = (e) => {
+    cfg.c2 = e.target.value;
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    rebuildGlassBuffer();
+  };
+  document.getElementById('bgPick').oninput = (e) => { cfg.bg = e.target.value; };
+
+  document.getElementById('resetBtn').onclick = () => {
+    rootShard = new Shard([
+      { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }
+    ]);
+    rootShard.offsetX = 0; rootShard.offsetY = 0;
+    impactRings = []; flyingShards = [];
+  };
+  document.getElementById('saveBtn').onclick = () => saveCanvas('glass-shatter', 'png');
+
+  // 底部挂件
+  const bottomLinks = document.getElementById('bottomLinks');
+  const showLinksBtn = document.getElementById('showLinksBtn');
+  const hideLinksBtn = document.getElementById('hideLinksBtn');
+  const infoModal = document.getElementById('infoModal');
+  hideLinksBtn.onclick = () => { bottomLinks.classList.remove('visible'); bottomLinks.classList.add('hidden'); showLinksBtn.classList.add('visible'); };
+  showLinksBtn.onclick = () => { bottomLinks.classList.remove('hidden'); bottomLinks.classList.add('visible'); showLinksBtn.classList.remove('visible'); };
+  document.getElementById('wechatBtn').onclick = () => infoModal.classList.add('show');
+  infoModal.onclick = (e) => { if (e.target === infoModal) infoModal.classList.remove('show'); };
+
+  // 呼吸光标
+  const cursorDot = document.getElementById('cursorDot');
+  document.addEventListener('pointermove', (e) => { cursorDot.style.left = e.clientX + 'px'; cursorDot.style.top = e.clientY + 'px'; });
+  panel.addEventListener('pointerenter', () => cursorDot.classList.add('hide'));
+  panel.addEventListener('pointerleave', () => cursorDot.classList.remove('hide'));
+  bottomLinks.addEventListener('pointerenter', () => cursorDot.classList.add('hide'));
+  bottomLinks.addEventListener('pointerleave', () => cursorDot.classList.remove('hide'));
+
+  bottomLinks.classList.add('visible');
+}
+</script>
+</body>
+</html>
