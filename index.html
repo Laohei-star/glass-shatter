@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>碎玻璃文字【老黑】</title>
+<title>碎玻璃【老黑】</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{overflow:hidden;background:#000;cursor:none;font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif}
@@ -63,7 +63,7 @@ input[type="range"]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;b
 <div class="cursor-dot" id="cursorDot"></div>
 
 <div class="control-panel" id="controlPanel">
-  <div class="panel-title">碎玻璃文字【老黑】</div>
+  <div class="panel-title">碎玻璃【老黑】</div>
 
   <div>
     <div class="param-label"><span>文字（换行用回车）</span></div>
@@ -82,6 +82,18 @@ input[type="range"]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;b
     <div class="param-label"><span>字号</span><span class="param-value" id="fontSizeVal">200</span></div>
     <input type="range" id="fontSize" min="20" max="400" value="200">
   </div>
+
+  <div class="section-label">图片模式</div>
+  <div>
+    <label class="font-file-btn" for="imgFile">＋ 上传图片（变为玻璃）</label>
+    <input type="file" id="imgFile" accept="image/*" style="display:none">
+    <div class="font-file-name" id="imgFileName"></div>
+  </div>
+  <div>
+    <div class="param-label"><span>图片大小</span><span class="param-value" id="imgScaleVal">1.0</span></div>
+    <input type="range" id="imgScale" min="0.2" max="2" step="0.05" value="1.0">
+  </div>
+  <button class="preset-btn" id="imgClearBtn" style="width:100%">清除图片（恢复文字）</button>
 
   <div class="section-label">碎裂效果</div>
 
@@ -148,6 +160,7 @@ const cfg = {
   fontSize: 200,
   shardCount: 20,
   glassAlpha: 0.5,
+  imgScale: 1.0,
   c1: '#ffffff',
   c2: '#a0d8ff',
   bg: '#0000ff'
@@ -158,6 +171,8 @@ let cnv;
 let rootShard = null;
 let impactRings = [];
 let flyingShards = [];
+let uploadedImage = null;
+let imgRect = null;
 
 // ===== 几何工具 =====
 function pointInPoly(x, y, poly) {
@@ -427,7 +442,25 @@ class FlyingShard {
   }
 }
 
-// ===== 玻璃纹理（全屏） =====
+// ===== 创建根碎片（根据模式自动选择区域） =====
+function createRootShard() {
+  if (uploadedImage && imgRect) {
+    rootShard = new Shard([
+      { x: imgRect.x, y: imgRect.y },
+      { x: imgRect.x + imgRect.w, y: imgRect.y },
+      { x: imgRect.x + imgRect.w, y: imgRect.y + imgRect.h },
+      { x: imgRect.x, y: imgRect.y + imgRect.h }
+    ]);
+  } else {
+    rootShard = new Shard([
+      { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }
+    ]);
+  }
+  rootShard.offsetX = 0; rootShard.offsetY = 0;
+  impactRings = []; flyingShards = [];
+}
+
+// ===== 玻璃纹理 =====
 function rebuildGlassBuffer() {
   if (!glassBuffer) return;
   const ctx = glassBuffer.drawingContext;
@@ -435,47 +468,69 @@ function rebuildGlassBuffer() {
   const c1 = color(cfg.c1);
   const r1 = red(c1), g1 = green(c1), b1 = blue(c1);
 
-  // 玻璃底色
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 1.8})`);
-  grad.addColorStop(0.4, `rgba(${r1},${g1},${b1},${cfg.glassAlpha})`);
-  grad.addColorStop(1, `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 0.4})`);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, width, height);
+  // 绘制区域：图片模式仅图片区域，文字模式全屏
+  let dx = 0, dy = 0, dw = width, dh = height;
 
-  // 对角线反光
+  if (uploadedImage) {
+    // 图片模式：contain 适配 + 缩放，居中显示完整图片
+    const img = uploadedImage;
+    const baseScale = Math.min(width / img.width, height / img.height);
+    const scale = baseScale * cfg.imgScale;
+    dw = img.width * scale;
+    dh = img.height * scale;
+    dx = (width - dw) / 2;
+    dy = (height - dh) / 2;
+    imgRect = { x: dx, y: dy, w: dw, h: dh };
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.fillStyle = `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 0.35})`;
+    ctx.fillRect(dx, dy, dw, dh);
+  } else {
+    imgRect = null;
+    // 文字模式：玻璃底色
+    const grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 1.8})`);
+    grad.addColorStop(0.4, `rgba(${r1},${g1},${b1},${cfg.glassAlpha})`);
+    grad.addColorStop(1, `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 0.4})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+    // 文字
+    const lines = cfg.text.split('\n');
+    const lh = cfg.fontSize * 1.4;
+    ctx.font = `300 ${cfg.fontSize}px ${cfg.fontName}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const startY = height / 2 - (lines.length - 1) * lh / 2;
+    ctx.fillStyle = `rgba(${r1},${g1},${b1},0.25)`;
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], width / 2 + 2, startY + i * lh + 2);
+    ctx.fillStyle = cfg.c2;
+    for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], width / 2, startY + i * lh);
+  }
+
+  // 对角线反光（限制在绘制区域内）
   ctx.save();
+  ctx.beginPath();
+  ctx.rect(dx, dy, dw, dh);
+  ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
-  const reflGrad = ctx.createLinearGradient(0, 0, width, height);
+  const reflGrad = ctx.createLinearGradient(dx, dy, dx + dw, dy + dh);
   reflGrad.addColorStop(0, 'rgba(255,255,255,0)');
   reflGrad.addColorStop(0.42, 'rgba(255,255,255,0.02)');
   reflGrad.addColorStop(0.5, 'rgba(255,255,255,0.06)');
   reflGrad.addColorStop(0.58, 'rgba(255,255,255,0.02)');
   reflGrad.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = reflGrad;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(dx, dy, dw, dh);
   ctx.restore();
 
-  // 文字
-  const lines = cfg.text.split('\n');
-  const lh = cfg.fontSize * 1.4;
-  ctx.font = `300 ${cfg.fontSize}px ${cfg.fontName}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const startY = height / 2 - (lines.length - 1) * lh / 2;
-  ctx.fillStyle = `rgba(${r1},${g1},${b1},0.25)`;
-  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], width / 2 + 2, startY + i * lh + 2);
-  ctx.fillStyle = cfg.c2;
-  for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], width / 2, startY + i * lh);
+  // 玻璃上层覆盖（仅绘制区域）
+  const topAlpha = uploadedImage ? cfg.glassAlpha * 0.2 : cfg.glassAlpha * 0.5;
+  ctx.fillStyle = `rgba(${r1},${g1},${b1},${topAlpha})`;
+  ctx.fillRect(dx, dy, dw, dh);
 
-  // 玻璃上层覆盖
-  ctx.fillStyle = `rgba(${r1},${g1},${b1},${cfg.glassAlpha * 0.5})`;
-  ctx.fillRect(0, 0, width, height);
-
-  // 微噪点
+  // 微噪点（仅绘制区域）
   for (let i = 0; i < 200; i++) {
     ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.025})`;
-    ctx.fillRect(Math.random() * width, Math.random() * height, 1, 1);
+    ctx.fillRect(dx + Math.random() * dw, dy + Math.random() * dh, 1, 1);
   }
 }
 
@@ -573,17 +628,15 @@ function playGlassBreak() {
 // ===== 点击碎裂 =====
 function onCanvasPointerDown(e) {
   const px = mouseX, py = mouseY;
+  if (!rootShard || !pointInPoly(px, py, rootShard.poly)) return;
   impactRings.push(new ImpactRing(px, py));
-  // 碎裂对应碎片
-  if (rootShard) {
-    const leaf = rootShard.findLeaf(px, py);
-    if (leaf) {
-      // 飞溅碎片数量随被敲碎片面积自动缩放，小碎片飞溅少
-      const area = polyArea(leaf.poly);
-      const burstCount = Math.max(2, Math.min(16, Math.round(Math.sqrt(area / 2500) * (0.5 + Math.random() * 0.8))));
-      for (let i = 0; i < burstCount; i++) flyingShards.push(new FlyingShard(px, py, area));
-      leaf.crack(px, py);
-    }
+  const leaf = rootShard.findLeaf(px, py);
+  if (leaf) {
+    const area = polyArea(leaf.poly);
+    const burstCount = Math.max(2, Math.min(16, Math.round(Math.sqrt(area / 2500) * (0.5 + Math.random() * 0.8))));
+    for (let i = 0; i < burstCount; i++) flyingShards.push(new FlyingShard(px, py, area));
+    leaf.crack(px, py);
+    playGlassBreak();
   }
 }
 
@@ -595,10 +648,7 @@ function setup() {
   glassBuffer = createGraphics(width, height);
   glassBuffer.pixelDensity(1);
   rebuildGlassBuffer();
-  rootShard = new Shard([
-    { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }
-  ]);
-  rootShard.offsetX = 0; rootShard.offsetY = 0; // 根碎片无位移
+  createRootShard();
   cnv.elt.addEventListener('pointerdown', onCanvasPointerDown);
   bindUI();
 }
@@ -638,12 +688,7 @@ function windowResized() {
   glassBuffer = createGraphics(width, height);
   glassBuffer.pixelDensity(1);
   rebuildGlassBuffer();
-  rootShard = new Shard([
-    { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }
-  ]);
-  rootShard.offsetX = 0; rootShard.offsetY = 0;
-  impactRings = [];
-  flyingShards = [];
+  createRootShard();
 }
 
 // ===== UI 绑定 =====
@@ -654,7 +699,8 @@ function bindUI() {
   const sliders = [
     ['fontSize', 'fontSizeVal', v => v + 'px'],
     ['shardCount', 'shardCountVal', v => v],
-    ['glassAlpha', 'glassAlphaVal', v => v]
+    ['glassAlpha', 'glassAlphaVal', v => v],
+    ['imgScale', 'imgScaleVal', v => v.toFixed(2)]
   ];
   for (const [id, valId, fmt] of sliders) {
     const el = document.getElementById(id);
@@ -664,6 +710,7 @@ function bindUI() {
       cfg[id] = v;
       valEl.textContent = fmt(v);
       if (id === 'fontSize' || id === 'glassAlpha') rebuildGlassBuffer();
+      if (id === 'imgScale' && uploadedImage) { rebuildGlassBuffer(); createRootShard(); }
     };
   }
 
@@ -723,12 +770,37 @@ function bindUI() {
   };
   document.getElementById('bgPick').oninput = (e) => { cfg.bg = e.target.value; };
 
+  // 图片上传
+  document.getElementById('imgFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('imgFileName').textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        uploadedImage = img;
+        rebuildGlassBuffer();
+        createRootShard();
+      };
+      img.onerror = () => { document.getElementById('imgFileName').textContent = '图片加载失败'; };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+
+  document.getElementById('imgClearBtn').onclick = () => {
+    uploadedImage = null;
+    imgRect = null;
+    document.getElementById('imgFileName').textContent = '';
+    document.getElementById('imgFile').value = '';
+    rebuildGlassBuffer();
+    createRootShard();
+  };
+
   document.getElementById('resetBtn').onclick = () => {
-    rootShard = new Shard([
-      { x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: height }, { x: 0, y: height }
-    ]);
-    rootShard.offsetX = 0; rootShard.offsetY = 0;
-    impactRings = []; flyingShards = [];
+    createRootShard();
   };
   document.getElementById('saveBtn').onclick = () => saveCanvas('glass-shatter', 'png');
 
